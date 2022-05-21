@@ -165,19 +165,24 @@ else
   dep_rt = null_dep
 endif
 
-vkh_sp = subproject('vulkan-headers')
-vk_api_xml = vkh_sp.get_variable('vulkan_api_xml')
-dep_vulkan = vkh_sp.get_variable('vulkan_headers_dep')
+if get_option('use_vulkan')
+  vkh_sp = subproject('vulkan-headers')
+  vk_api_xml = vkh_sp.get_variable('vulkan_api_xml')
+  dep_vulkan = vkh_sp.get_variable('vulkan_headers_dep')
 
-vk_enum_to_str = custom_target(
-  'vk_enum_to_str',
-  input : ['bin/gen_enum_to_str.py', vk_api_xml],
-  output : ['vk_enum_to_str.c', 'vk_enum_to_str.h'],
-  command : [
-    prog_python, '@INPUT0@', '--xml', '@INPUT1@',
-    '--outdir', meson.current_build_dir()
-  ],
-)
+  vk_enum_to_str = custom_target(
+    'vk_enum_to_str',
+    input : ['bin/gen_enum_to_str.py', vk_api_xml],
+    output : ['vk_enum_to_str.c', 'vk_enum_to_str.h'],
+    command : [
+      prog_python, '@INPUT0@', '--xml', '@INPUT1@',
+      '--outdir', meson.current_build_dir()
+    ],
+  )
+else
+  dep_vulkan = null_dep
+  vk_enum_to_str = []
+endif
 
 imgui_options = [
   'default_library=static',
