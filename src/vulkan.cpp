@@ -315,22 +315,6 @@ static struct device_data *new_device_data(VkDevice device, struct instance_data
    return data;
 }
 
-static VkDescriptorSet alloc_descriptor_set(const struct swapchain_data *data)
-{
-   VkDescriptorSet descriptor_set {};
-   struct device_data *device_data = data->device;
-
-   VkDescriptorSetAllocateInfo alloc_info {};
-   alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-   alloc_info.descriptorPool = data->descriptor_pool;
-   alloc_info.descriptorSetCount = 1;
-   alloc_info.pSetLayouts = &data->descriptor_layout;
-   VK_CHECK(device_data->vtable.AllocateDescriptorSets(device_data->device,
-                                                       &alloc_info,
-                                                       &descriptor_set));
-   return descriptor_set;
-}
-
 static struct queue_data *new_queue_data(VkQueue queue,
                                          const VkQueueFamilyProperties *family_props,
                                          uint32_t family_index,
@@ -667,6 +651,9 @@ static void create_image(struct swapchain_data *data,
 {
    struct device_data *device_data = data->device;
 
+   image.width = width;
+   image.height = height;
+
    VkImageCreateInfo image_info = {};
    image_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
    image_info.imageType = VK_IMAGE_TYPE_2D;
@@ -865,8 +852,7 @@ ImTextureID add_texture(swapchain_stats* stats, const std::string& filename, int
    *width  = original_width  * ratio;
    *height = original_height * ratio;
 
-   ti.descset = alloc_descriptor_set(data);
-   create_image(data, ti.descset, *width, *height, VK_FORMAT_R8G8B8A8_UNORM, ti.image);
+   ti.descset = create_image_with_desc(data, *width, *height, VK_FORMAT_R8G8B8A8_UNORM, ti.image);
    update_image_descriptor(data, ti.image.view, ti.descset);
    ti.filename = filename;
    ti.maxwidth = maxwidth;
@@ -945,35 +931,31 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
 
    /* ensure_textures */
    for (auto& tex : data->textures) {
-      if (!tex.descset)
+      if (!tex.descset || tex.image.uploaded)
          continue;
 
-      if (!tex.image.uploaded) {
-//          tex.image.uploaded = true;
-
-         // load
-         int width, height, channels;
-         unsigned char* pixels = stbi_load(tex.filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
-         if (!pixels)
-         {
-            SPDLOG_ERROR("Failed to load image: {}", tex.filename);
-            continue;
-         }
-
-         // reduce the image
-         if (width > tex.maxwidth && tex.maxwidth != 0) {
-            unsigned char* pixels_resized = (unsigned char*)malloc(width * height * STBI_rgb_alpha);
-            stbir_resize_uint8(pixels, width, height, 0, pixels_resized, tex.image.width, tex.image.height, 0, STBI_rgb_alpha);
-            stbi_image_free(pixels);
-            pixels = pixels_resized;
-         }
-
-         SPDLOG_DEBUG("Uploading '{}' ({}x{})", tex.filename, tex.image.width, tex.image.height);
-         size_t upload_size = tex.image.width * tex.image.height * STBI_rgb_alpha;
-
-         submit_image_upload_cmd(data, &tex.image, pixels, upload_size);
-         stbi_image_free(pixels);
+      // load
+      int width, height, channels;
+      unsigned char* pixels = stbi_load(tex.filename.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+      if (!pixels)
+      {
+         SPDLOG_ERROR("Failed to load image: {}", tex.filename);
+         continue;
       }
+
+      // reduce the image
+      if (width > tex.maxwidth && tex.maxwidth != 0) {
+         unsigned char* pixels_resized = (unsigned char*)malloc(tex.image.width * tex.image.height * STBI_rgb_alpha);
+         stbir_resize_uint8(pixels, width, height, 0, pixels_resized, tex.image.width, tex.image.height, 0, STBI_rgb_alpha);
+         stbi_image_free(pixels);
+         pixels = pixels_resized;
+      }
+
+      SPDLOG_DEBUG("Uploading '{}' ({}x{})", tex.filename, tex.image.width, tex.image.height);
+      size_t upload_size = tex.image.width * tex.image.height * STBI_rgb_alpha;
+
+      submit_image_upload_cmd(data, &tex.image, pixels, upload_size);
+      stbi_image_free(pixels);
    }
 
    /* Bounce the image to display back to color attachment layout for
@@ -1052,7 +1034,7 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
    /* Bind pipeline and descriptor sets */
    device_data->vtable.CmdBindPipeline(draw->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, data->pipeline);
 
-#if 1 // disable if using >1 font textures
+#if 0 // disable if using >1 font textures
    VkDescriptorSet desc_set[1] = {
       //data->descriptor_set
       reinterpret_cast<VkDescriptorSet>(data->font_atlas->TexID)
@@ -1115,7 +1097,7 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
          scissor.extent.width = (uint32_t)(pcmd->ClipRect.z - pcmd->ClipRect.x);
          scissor.extent.height = (uint32_t)(pcmd->ClipRect.w - pcmd->ClipRect.y + 1); // FIXME: Why +1 here?
          device_data->vtable.CmdSetScissor(draw->command_buffer, 0, 1, &scissor);
-#if 0 //enable if using >1 font textures or use texture array
+#if 1 //enable if using >1 font textures or use texture array
          VkDescriptorSet desc_set[1] = { (VkDescriptorSet)pcmd->TextureId };
          device_data->vtable.CmdBindDescriptorSets(draw->command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
                                                    data->pipeline_layout, 0, 1, desc_set, 0, NULL);
@@ -1251,10 +1233,10 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    /* Descriptor pool */
    VkDescriptorPoolSize sampler_pool_size = {};
    sampler_pool_size.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-   sampler_pool_size.descriptorCount = 1;
+   sampler_pool_size.descriptorCount = 3;
    VkDescriptorPoolCreateInfo desc_pool_info = {};
    desc_pool_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-   desc_pool_info.maxSets = 1;
+   desc_pool_info.maxSets = 3;
    desc_pool_info.poolSizeCount = 1;
    desc_pool_info.pPoolSizes = &sampler_pool_size;
    VK_CHECK(device_data->vtable.CreateDescriptorPool(device_data->device,
@@ -1602,6 +1584,7 @@ static void shutdown_textures(struct swapchain_data *data)
       destroy_vk_image(device_data, tex.image);
    }
 
+   data->textures.clear();
    HUDElements.image_infos = {};
    HUDElements.background_image_infos = {};
 }
