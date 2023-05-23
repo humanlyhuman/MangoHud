@@ -70,6 +70,7 @@ struct vk_image {
    VkImage image;
    VkImageView view;
    VkDeviceMemory mem;
+   VkDescriptorSet descset;
    uint32_t width, height;
    size_t size;
    bool uploaded;
@@ -77,7 +78,6 @@ struct vk_image {
 
 struct texture_info {
    vk_image image;
-   VkDescriptorSet descset;
    std::string filename;
    int maxwidth;
 };
@@ -852,14 +852,14 @@ ImTextureID add_texture(swapchain_stats* stats, const std::string& filename, int
    *width  = original_width  * ratio;
    *height = original_height * ratio;
 
-   ti.descset = create_image_with_desc(data, *width, *height, VK_FORMAT_R8G8B8A8_UNORM, ti.image);
-   update_image_descriptor(data, ti.image.view, ti.descset);
+   ti.image.descset = create_image_with_desc(data, *width, *height, VK_FORMAT_R8G8B8A8_UNORM, ti.image);
+   update_image_descriptor(data, ti.image.view, ti.image.descset);
    ti.filename = filename;
    ti.maxwidth = maxwidth;
 
    data->textures.push_back(ti);
 
-   return (ImTextureID) ti.descset;
+   return (ImTextureID) ti.image.descset;
 }
 
 static void CreateOrResizeBuffer(struct device_data *data,
@@ -931,7 +931,7 @@ static struct overlay_draw *render_swapchain_display(struct swapchain_data *data
 
    /* ensure_textures */
    for (auto& tex : data->textures) {
-      if (!tex.descset || tex.image.uploaded)
+      if (!tex.image.descset || tex.image.uploaded)
          continue;
 
       // load
@@ -1239,6 +1239,7 @@ static void setup_swapchain_data_pipeline(struct swapchain_data *data)
    desc_pool_info.maxSets = 3;
    desc_pool_info.poolSizeCount = 1;
    desc_pool_info.pPoolSizes = &sampler_pool_size;
+   desc_pool_info.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
    VK_CHECK(device_data->vtable.CreateDescriptorPool(device_data->device,
                                                      &desc_pool_info,
                                                      NULL, &data->descriptor_pool));
@@ -1573,6 +1574,9 @@ static void shutdown_swapchain_font(struct swapchain_data *data)
 {
    struct device_data *device_data = data->device;
    destroy_vk_image(device_data, data->font_image);
+   device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &data->font_image.descset);
+   device_data->vtable.DestroyBuffer(device_data->device, data->upload_font_buffer, NULL);
+   device_data->vtable.FreeMemory(device_data->device, data->upload_font_buffer_mem, NULL);
 }
 
 static void shutdown_textures(struct swapchain_data *data)
@@ -1580,7 +1584,7 @@ static void shutdown_textures(struct swapchain_data *data)
    struct device_data *device_data = data->device;
    for (auto& tex : data->textures)
    {
-      device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &tex.descset);
+      device_data->vtable.FreeDescriptorSets(device_data->device, data->descriptor_pool, 1, &tex.image.descset);
       destroy_vk_image(device_data, tex.image);
    }
 
@@ -1609,6 +1613,9 @@ static void shutdown_swapchain_data(struct swapchain_data *data)
       device_data->vtable.DestroyFramebuffer(device_data->device, data->framebuffers[i], NULL);
    }
 
+   shutdown_swapchain_font(data);
+   shutdown_textures(data);
+
    device_data->vtable.DestroyRenderPass(device_data->device, data->render_pass, NULL);
 
    device_data->vtable.DestroyCommandPool(device_data->device, data->command_pool, NULL);
@@ -1622,8 +1629,6 @@ static void shutdown_swapchain_data(struct swapchain_data *data)
                                                   data->descriptor_layout, NULL);
 
    device_data->vtable.DestroySampler(device_data->device, data->font_sampler, NULL);
-   shutdown_swapchain_font(data);
-   shutdown_textures(data);
 
    IM_FREE(data->font_atlas);
    ImGui::DestroyContext(data->imgui_context);
