@@ -116,7 +116,7 @@ void imgui_create(void *ctx, const gl_wsi plat)
     }
 
     if (!gladLoadGL())
-        spdlog::error("Failed to initialize OpenGL context, crash incoming");
+        SPDLOG_DEBUG("Failed to initialize OpenGL context, crash incoming");
 
     GetOpenGLVersion(sw_stats.version_gl.major,
         sw_stats.version_gl.minor,

@@ -52,6 +52,9 @@ int fan_speed;
 fcatoverlay fcatstatus;
 std::string drm_dev;
 
+#if SPDLOG_ACTIVE_LEVEL < SPDLOG_LEVEL_OFF
+void init_spdlog() {}
+#else
 void init_spdlog()
 {
    if (spdlog::get("MANGOHUD"))
@@ -90,6 +93,7 @@ void init_spdlog()
    }
 
 }
+#endif
 
 void FpsLimiter(struct fps_limit& stats){
    stats.sleepTime = stats.targetFrameTime - (stats.frameStart - stats.frameEnd);

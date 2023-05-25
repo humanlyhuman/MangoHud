@@ -384,6 +384,7 @@ bool dbus_manager::handle_game_registered(DBusMessage* _msg,
     auto pid = iter.get_primitive<int32_t>();
     iter.next();
     auto path = iter.get_primitive<std::string>();
+    (void)pid;
     SPDLOG_INFO("Game registered: {} '{}'", pid, path);
     return true;
 }
@@ -394,6 +395,7 @@ bool dbus_manager::handle_game_unregistered(DBusMessage* _msg,
     auto pid = iter.get_primitive<int32_t>();
     iter.next();
     auto path = iter.get_primitive<std::string>();
+    (void)pid;
     SPDLOG_INFO("Game unregistered: {} '{}'", pid, path);
     return true;
 }

@@ -781,6 +781,7 @@ static void submit_image_upload_cmd(struct swapchain_data *data, vk_image *img, 
    img->uploaded = true;
    auto dur = Clock::now() - start;
    auto dur_us = std::chrono::duration_cast<std::chrono::microseconds>(dur).count();
+   (void)dur_us;
    SPDLOG_DEBUG("upload duration: {} us, {} bytes, {:0.02f} MiB/s", dur_us, upload_size, upload_size/(dur_us/1e6f)/(1024*1024));
 }
 
