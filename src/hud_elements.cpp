@@ -136,7 +136,7 @@ static void ImguiNextColumnFirstItem()
     ImGui::TableNextColumn();
     HUDElements.table_columns_count += 1;
 }
-/**
+/**R
 * Go to next column or second column on new row
 */
 static void ImguiNextColumnOrNewRow(int column = -1)
@@ -176,6 +176,7 @@ void HudElements::version(){
         HUDElements.TextColored(HUDElements.colors.text, "%s", MANGOHUD_VERSION);
     }
 }
+
 
 void HudElements::gpu_stats(){
     if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_stats]){
@@ -367,9 +368,9 @@ void HudElements::cpu_stats(){
             HUDElements.TextColored(HUDElements.colors.text, "W");
             ImGui::PopFont();
         }
+        
     }
 }
-
 
 static float get_core_load_stat(void*,int);
 static float get_core_load_stat(void *data, int idx){
@@ -448,6 +449,7 @@ void HudElements::core_load(){
             ImGui::PushFont(HUDElements.sw_stats->font1);
             HUDElements.TextColored(HUDElements.colors.text, "MHz");
             ImGui::PopFont();
+            ImguiNextColumnOrNewRow(); 
         }
     }
 }
@@ -708,11 +710,12 @@ void HudElements::vulkan_driver(){
     }
 }
 
+
 void HudElements::arch(){
     if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_arch]){
         ImguiNextColumnFirstItem();
         ImGui::PushFont(HUDElements.sw_stats->font1);
-        HUDElements.TextColored(HUDElements.colors.engine, "%s", "" MANGOHUD_ARCH);
+        HUDElements.TextColored(HUDElements.colors.engine, "%s", MANGOHUD_ARCH);
         ImGui::PopFont();
     }
 }
@@ -1387,13 +1390,11 @@ void HudElements::fps_metrics(){
         HUDElements.TextColored(HUDElements.colors.engine, "%s", metric.display_name.c_str());
         ImguiNextColumnOrNewRow();
         right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%.0f", metric.value);
-        ImGui::SameLine(0, 1.0f);
-        ImGui::PushFont(HUDElements.sw_stats->font1);
-        HUDElements.TextColored(HUDElements.colors.text, "FPS");
-        ImGui::PopFont();
+        // Add a new row for the next display name and value
+        ImguiNextColumnOrNewRow();
+        // Add an empty row to separate the other display names and values
         ImguiNextColumnOrNewRow();
     }
-
 }
 
 void HudElements::hdr() {
