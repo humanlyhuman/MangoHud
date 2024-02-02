@@ -1,6 +1,6 @@
 project('MangoHud',
   ['c', 'cpp'],
-  version : 'v0.7.0',
+  version : 'v0.7.1',
   license : 'MIT',
   meson_version: '>=0.60.0',
   default_options : ['buildtype=release', 'c_std=c99', 'cpp_std=c++14', 'warning_level=2']
@@ -229,8 +229,9 @@ if not spdlog_dep.found()
     'default_library=static',
     'compile_library=true',
     'werror=false',
-    'tests=false',
-    'external_fmt=disabled'
+    'tests=disabled',
+    'external_fmt=disabled',
+    'std_format=disabled'
   ])
   spdlog_dep = spdlog_sp.get_variable('spdlog_dep')
 else

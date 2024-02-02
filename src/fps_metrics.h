@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <condition_variable>
 #include <stdexcept>
+#include <iomanip>
+#include <spdlog/spdlog.h>
 
 struct metric_t {
     std::string name;
@@ -25,6 +27,7 @@ class fpsMetrics {
         bool run = false;
         bool thread_init = false;
         bool terminate = false;
+        bool resetting = false;
 
         void calculate(){
             thread_init = true;
@@ -70,6 +73,9 @@ class fpsMetrics {
                             }
                             it->display_name = stream.str();
                             uint64_t idx = val * sorted_values.size() - 1;
+                            if (idx >= sorted_values.size())
+                                break;
+
                             it->value = sorted_values[idx];
                             ++it;
                         } catch (const std::invalid_argument& e) {
@@ -102,25 +108,45 @@ class fpsMetrics {
         };
 
         void update(uint64_t now, double fps){
-            fps_stats.push_back({now, fps});
-            // Calculate the cut-off nanotime (10 minutes ago)
-            uint64_t ten_minutes_ns = 600000000000ULL; // 10 minutes in nanoseconds
-            uint64_t cutoff_time_ns = os_time_get_nano() - ten_minutes_ns;
+            if (resetting)
+                return;
 
-            // Removing elements older than 10 minutes
-            fps_stats.erase(std::remove_if(fps_stats.begin(), fps_stats.end(),
-                                            [cutoff_time_ns](const std::pair<uint64_t, float>& p) {
-                                                return p.first < cutoff_time_ns;
-                                            }),
-                            fps_stats.end());
-        };
+            fps_stats.push_back({now, fps});
+            uint64_t ten_minute_duration = 600000000000ULL; // 10 minutes in nanoseconds
+
+            // Check if the system's uptime is less than 10 minutes
+            if (now >= ten_minute_duration) {
+                uint64_t ten_minutes_ago = now - ten_minute_duration;
+
+                fps_stats.erase(
+                    std::remove_if(
+                        fps_stats.begin(),
+                        fps_stats.end(),
+                        [ten_minutes_ago](const std::pair<uint64_t, float>& entry) {
+                            return entry.first < ten_minutes_ago;
+                        }
+                    ),
+                    fps_stats.end()
+                );
+            }
+        }
 
         void update_thread(){
+            if (resetting)
+                return;
+
             {
                 std::lock_guard<std::mutex> lock(mtx);
                 run = true;
             }
             cv.notify_one();
+        }
+
+        void reset_metrics(){
+            resetting = true;
+            while (run){}
+            fps_stats.clear();
+            resetting = false;
         }
 
         ~fpsMetrics(){

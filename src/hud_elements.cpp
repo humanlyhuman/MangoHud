@@ -1340,7 +1340,8 @@ void HudElements::device_battery()
                             right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%s", battery.c_str());
                     }
                 }
-                ImGui::TableNextRow();
+                if (device_count > 1 && !HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_horizontal])
+                    ImGui::TableNextRow();
                 ImGui::PopFont();
             }
         }
